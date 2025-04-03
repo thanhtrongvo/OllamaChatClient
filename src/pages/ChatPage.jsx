@@ -117,16 +117,6 @@ function ChatPage() {
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-primary-50 to-secondary-50">
       {/* Sidebar */}
       <div className="w-72 flex-shrink-0 hidden md:block border-r border-primary-200 bg-white/80 backdrop-blur-sm shadow-subtle">
-        {/* Add ModelSelector at the top of the sidebar */}
-        <div className="p-4 border-b border-primary-200">
-          <ModelSelector
-            models={availableModels}
-            selectedModel={currentModel}
-            onSelectModel={handleChangeModel}
-            fetchModels={loadAvailableModels}
-            className="w-full"
-          />
-        </div>
         <ChatSidebar
           chats={chatHistory}  // Changed from messages to chatHistory
           selectedChatId={activeChatId}
@@ -147,8 +137,8 @@ function ChatPage() {
               <span className="font-display font-semibold text-dark-700">Chat AI</span>
             </div>
 
-            {/* Added mobile-only ModelSelector for responsive design */}
-            <div className="md:hidden w-48">
+            {/* Model selection */}
+            <div className="w-48">
               <ModelSelector
                 models={availableModels}
                 selectedModel={currentModel}
@@ -157,6 +147,9 @@ function ChatPage() {
                 className="w-full"
               />
             </div>
+
+              
+            
           </div>
 
           {/* Error message (if any) */}

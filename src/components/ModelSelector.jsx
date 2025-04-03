@@ -100,8 +100,7 @@ function ModelSelector({
       {isOpen && (
         <div 
           ref={dropdownRef}
-          className="absolute left-0 z-[999999] mt-1 w-56 origin-top-left rounded-md bg-white shadow-lg border border-gray-200"
-          style={{ position: 'absolute', pointerEvents: 'auto' }}
+          className="absolute left-0 z-1999 mt-1 w-56 origin-top-left rounded-md bg-white shadow-lg border border-gray-200"
         >
           <div className="py-1 max-h-60 overflow-y-auto">
             {error ? (
