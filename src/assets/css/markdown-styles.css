@@ -1,0 +1,262 @@
+/* Markdown Typography and Formatting Styles */
+
+/* Base styling for markdown content */
+.markdown-content.markdown-rendered {
+  line-height: 1.7;
+  font-size: 0.95rem;
+  color: #333;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Fix cho các dấu xuống dòng và khoảng cách */
+.markdown-content p {
+  white-space: pre-wrap;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+/* Đảm bảo giữ nguyên các dấu xuống dòng trong nội dung */
+.markdown-content {
+  white-space: pre-wrap;
+  display: block;
+}
+
+/* Fix đặc biệt cho danh sách và gạch đầu dòng */
+.prose .markdown-content ul {
+  list-style-type: disc;
+  margin-left: 1rem;
+  padding-left: 1rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose .markdown-content ol {
+  list-style-type: decimal;
+  margin-left: 1rem;
+  padding-left: 1rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.prose .markdown-content li {
+  display: list-item;
+  margin-bottom: 0.5rem;
+  padding-left: 0.5rem;
+}
+
+.prose .markdown-content li > p {
+  margin-bottom: 0.25rem;
+}
+
+/* Định dạng khoảng cách giữa các mục trong danh sách */
+.prose .markdown-content li + li {
+  margin-top: 0.5rem;
+}
+
+/* Hiển thị văn bản theo đúng cấu trúc */
+.prose .markdown-content > * + * {
+  margin-top: 1rem;
+}
+
+/* Định dạng tiêu đề */
+.prose .markdown-content h1,
+.prose .markdown-content h2,
+.prose .markdown-content h3,
+.prose .markdown-content h4,
+.prose .markdown-content h5,
+.prose .markdown-content h6 {
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  display: block;
+  font-weight: bold;
+}
+
+/* Điều chỉnh kiểu danh sách lồng nhau */
+.prose .markdown-content ul,
+.prose .markdown-content ol {
+  display: block;
+  list-style-position: outside;
+  padding-left: 2rem;
+}
+
+.prose .markdown-content ul ul {
+  list-style-type: circle;
+}
+
+.prose .markdown-content ul ul ul {
+  list-style-type: square;
+}
+
+/* Đảm bảo emoji và các ký hiệu đặc biệt hiển thị đúng */
+.prose .markdown-content .emoji {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 1.2em;
+  line-height: 1;
+  margin: 0 0.05em;
+}
+
+/* Animation for cursor blink */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-cursor-blink {
+  animation: cursor-blink 1s infinite;
+}
+
+/* Task list styling */
+.prose .markdown-content ul.contains-task-list {
+  list-style-type: none;
+  padding-left: 0.5rem;
+}
+
+.prose .markdown-content .contains-task-list li {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.prose .markdown-content .contains-task-list input[type="checkbox"] {
+  margin-right: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+/* Fix cho việc hiển thị code blocks */
+.prose .markdown-content pre {
+  position: relative;
+  margin: 1rem 0;
+  padding: 1rem;
+  overflow: auto;
+  background-color: #282c34;
+  color: #abb2bf;
+  border-radius: 0.375rem;
+  max-height: 500px;
+}
+
+.prose .markdown-content code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.prose .markdown-content :not(pre) > code {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  color: #e53e3e;
+}
+
+/* Định dạng bảng */
+.prose .markdown-content table {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5rem 0;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  border: 1px solid #e2e8f0;
+  width: 100%;
+}
+
+.prose .markdown-content thead {
+  background-color: #f7fafc;
+}
+
+.prose .markdown-content th {
+  background-color: #f7fafc;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.prose .markdown-content td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.75rem 1rem;
+}
+
+/* Hiển thị blockquotes */
+.prose .markdown-content blockquote {
+  border-left: 4px solid #e2e8f0;
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+  color: #718096;
+  font-style: italic;
+  background-color: #f8fafc;
+}
+
+/* Thiết lập cho dark mode */
+@media (prefers-color-scheme: dark) {
+  .prose .markdown-content {
+    color: #e2e8f0;
+  }
+  
+  .prose .markdown-content blockquote {
+    background-color: #2d3748;
+    border-left-color: #4a5568;
+    color: #cbd5e0;
+  }
+  
+  .prose .markdown-content :not(pre) > code {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #f56565;
+  }
+  
+  .prose .markdown-content table {
+    border-color: #4a5568;
+  }
+  
+  .prose .markdown-content th,
+  .prose .markdown-content td {
+    border-color: #4a5568;
+  }
+  
+  .prose .markdown-content thead {
+    background-color: #2d3748;
+  }
+  
+  .prose .markdown-content th {
+    background-color: #2d3748;
+    color: #e2e8f0;
+  }
+}
+
+/* Fix cho trường hợp text trắng (khi message từ user) */
+.markdown-content.text-white strong {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.markdown-content.text-white h1,
+.markdown-content.text-white h2,
+.markdown-content.text-white h3,
+.markdown-content.text-white h4 {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.markdown-content.text-white code {
+  color: #f8f9fa;
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Details/summary styling */
+.prose .markdown-content details {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+}
+
+.prose .markdown-content summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem 0;
+}
+
+.prose .markdown-content details[open] summary {
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
