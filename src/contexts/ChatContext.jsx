@@ -600,7 +600,7 @@ export const ChatProvider = ({ children, defaultModelId = 'gemma3:4b' }) => {
     
     // Biến theo dõi thời gian cập nhật để giảm tần suất render
     let lastUpdateTime = 0;
-    const THROTTLE_INTERVAL = 80; // ms - Chỉ cập nhật UI mỗi 80ms
+    const THROTTLE_INTERVAL = 120; // Tăng từ 80ms lên 120ms để giảm số lần update UI
     
     // Handle incoming stream messages
     const handleStreamMessage = (enhancedResponse) => {

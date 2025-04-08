@@ -196,7 +196,7 @@ function ChatSidebar({
         >
           <PlusIcon className="h-5 w-5 mr-2" />
           <span className="whitespace-nowrap">Tạo cuộc trò chuyện mới</span>
-          {isTyping && <span className="ml-2 text-xs">(AI đang xử lý...)</span>}
+          
         </button>
       </div>
 

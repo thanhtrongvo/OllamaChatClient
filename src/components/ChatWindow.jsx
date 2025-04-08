@@ -51,8 +51,32 @@ function ChatWindow({
   // Tự động cuộn xuống khi có tin nhắn mới - với hiệu suất tối ưu
   const scrollToBottom = useCallback((smooth = true) => {
     if (messagesEndRef.current) {
-      const behavior = smooth ? "smooth" : "auto";
-      messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
+      // Sử dụng IntersectionObserver thay vì scrollIntoView để tăng hiệu suất
+      if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            const entry = entries[0];
+            if (!entry.isIntersecting) {
+              const behavior = smooth ? "smooth" : "auto";
+              messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
+            }
+            // Ngắt kết nối observer sau khi sử dụng
+            observer.disconnect();
+          },
+          { threshold: 1.0 }
+        );
+        
+        observer.observe(messagesEndRef.current);
+        // Đảm bảo kết quả thực hiện ngay nếu không sử dụng smooth scrolling
+        if (!smooth) {
+          observer.disconnect();
+          messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "end" });
+        }
+      } else {
+        // Fallback cho trình duyệt không hỗ trợ IntersectionObserver
+        const behavior = smooth ? "smooth" : "auto";
+        messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
+      }
       if (onScrollToBottom) onScrollToBottom();
     }
   }, [onScrollToBottom]);
@@ -209,43 +233,55 @@ function ChatWindow({
 
         {/* Danh sách tin nhắn */}
         {selectedChatId && (
-          <div className="space-y-8">
+          <div className="space-y-8 flex-1 flex flex-col">
             {messages.length === 0 ? (
-              <div className="flex flex-col justify-center items-center h-full text-center">
-                <div className="p-8 rounded-2xl bg-white shadow-xl max-w-lg transition-all hover:shadow-2xl border border-indigo-50">
-                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 rounded-xl inline-flex mb-6 shadow-lg">
-                    <CpuChipIcon className="h-14 w-14 text-white" />
+              <div className="flex-1 flex items-center justify-center">
+                <div className="w-full max-w-lg mx-auto p-8 rounded-2xl bg-white shadow-xl transition-all hover:shadow-2xl border border-indigo-50" style={{maxHeight: '80vh'}}>
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 rounded-xl inline-flex justify-center items-center mb-6 shadow-lg">
+                    <CpuChipIcon className={`h-14 w-14 text-white ${isAiResponding || isLoading ? 'animate-pulse' : ''}`} />
                   </div>
-                  <h3 className="text-2xl font-bold mb-4 text-gray-800">
-                    Cuộc trò chuyện mới
+                  <h3 className="text-xl font-bold mb-4 text-gray-800">
+                    {isAiResponding || isLoading ? "AI đang xử lý..." : "Cuộc trò chuyện mới"}
                   </h3>
                   <p className="text-gray-600 mb-6">
-                    Bắt đầu cuộc trò chuyện với AI bằng cách gửi tin nhắn bên dưới!
+                    {isAiResponding || isLoading 
+                      ? "Tin nhắn của bạn đang được xử lý, vui lòng đợi trong giây lát..."
+                      : "Bắt đầu cuộc trò chuyện với AI bằng cách gửi tin nhắn bên dưới!"}
                   </p>
-                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100 shadow-sm">
-                    <div className="flex items-center mb-3">
-                      <LightBulbIcon className="h-5 w-5 text-amber-500 mr-2" />
-                      <h4 className="font-semibold text-indigo-800">Gợi ý:</h4>
+                  {!(isAiResponding || isLoading) && (
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100 shadow-sm">
+                      <div className="flex items-center mb-3">
+                        <LightBulbIcon className="h-5 w-5 text-amber-500 mr-2" />
+                        <h4 className="font-semibold text-indigo-800">Gợi ý:</h4>
+                      </div>
+                      <ul className="space-y-2 text-left">
+                        <li className="flex items-start">
+                          <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">1</span>
+                          <span className="text-gray-700">Hỏi về một chủ đề bạn quan tâm</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">2</span>
+                          <span className="text-gray-700">Tìm kiếm giải thích cho một khái niệm phức tạp</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">3</span>
+                          <span className="text-gray-700">Yêu cầu viết mã hoặc giải quyết vấn đề</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">4</span>
+                          <span className="text-gray-700">Nhờ giúp đỡ với một dự án cụ thể</span>
+                        </li>
+                      </ul>
                     </div>
-                    <ul className="space-y-2 text-left">
-                      <li className="flex items-start">
-                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">1</span>
-                        <span className="text-gray-700">Hỏi về một chủ đề bạn quan tâm</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">2</span>
-                        <span className="text-gray-700">Tìm kiếm giải thích cho một khái niệm phức tạp</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">3</span>
-                        <span className="text-gray-700">Yêu cầu viết mã hoặc giải quyết vấn đề</span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">4</span>
-                        <span className="text-gray-700">Nhờ giúp đỡ với một dự án cụ thể</span>
-                      </li>
-                    </ul>
-                  </div>
+                  )}
+                  {(isAiResponding || isLoading) && (
+                    <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-5 border border-indigo-100 shadow-sm">
+                      <div className="flex items-center justify-center">
+                        <span className="inline-block h-3 w-3 rounded-full bg-indigo-600 animate-pulse mr-2"></span> 
+                        <span className="text-indigo-700">Đang xử lý... {formatThinkingTime(elapsedThinkingTime)}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -263,25 +299,7 @@ function ChatWindow({
           </div>
         )}
         
-        {/* Hiển thị khi AI đang suy nghĩ - với thiết kế nâng cao */}
-        {(isAiResponding || isLoading) && thinkingContent && (
-          <div className="transform transition-all duration-300 ease-out ml-12 mt-2 mb-4 scale-100 opacity-100">
-            <div className="bg-white rounded-lg shadow-lg border border-indigo-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-indigo-500/10 to-indigo-600/10 px-4 py-2 flex items-center justify-between">
-                <div className="flex items-center">
-                  <span className="inline-block h-3 w-3 rounded-full bg-indigo-600 animate-pulse mr-2"></span> 
-                  <span className="font-medium text-xs text-indigo-800">AI đang suy nghĩ... {formatThinkingTime(elapsedThinkingTime)}</span>
-                </div>
-                <ClockIcon className="h-4 w-4 text-indigo-400" />
-              </div>
-              <div className="p-3 overflow-auto max-h-60">
-                <div className="whitespace-pre-wrap bg-slate-50 p-3 rounded-md border border-slate-200 text-xs font-mono text-slate-700">
-                  {thinkingContent}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        
         
         {/* Hiển thị nút "Gửi lại" khi có tin nhắn lỗi - với thiết kế nâng cao */}
         {isLastMessageError() && !isAiResponding && !isSending && lastSentMessage && (

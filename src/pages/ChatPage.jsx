@@ -11,7 +11,8 @@ import {
   ChatBubbleLeftEllipsisIcon,
   Cog6ToothIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  CpuChipIcon
 } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext.jsx';
@@ -46,6 +47,7 @@ function ChatPage() {
   const [thinkingContent, setThinkingContent] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   
   // Ref để lưu hàm abort stream
   const abortStreamRef = useRef(null);
@@ -201,16 +203,16 @@ function ChatPage() {
               <span className="font-display font-semibold text-dark-700">Chat AI</span>
             </div>
 
-            {/* Model selection */}
-            <div className="w-48 hidden sm:block">
-              <ModelSelector
-                models={availableModels}
-                selectedModel={currentModel}
-                onSelectModel={handleChangeModel}
-                fetchModels={loadAvailableModels}
-                className="w-full"
-              />
-            </div>
+            {/* Model selection button */}
+            <button
+              onClick={() => setModelSelectorOpen(true)}
+              className="flex items-center space-x-2 bg-white rounded-md px-3 py-2 border border-gray-300 hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            >
+              <CpuChipIcon className="h-5 w-5 text-indigo-500" />
+              <span className="text-sm font-medium truncate max-w-[120px]">
+                {availableModels.find(m => m.id === currentModel)?.displayName || currentModel.replace(':', ' ')}
+              </span>
+            </button>
           </div>
 
           {/* Error message (if any) */}
@@ -247,6 +249,16 @@ function ChatPage() {
             selectedChatId={activeChatId}
           />
         </div>
+
+        {/* Model Selector Modal */}
+        <ModelSelector
+          models={availableModels}
+          selectedModel={currentModel}
+          onSelectModel={handleChangeModel}
+          fetchModels={loadAvailableModels}
+          isOpen={modelSelectorOpen}
+          onClose={() => setModelSelectorOpen(false)}
+        />
       </div>
     </div>
   );

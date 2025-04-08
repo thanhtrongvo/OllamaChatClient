@@ -1,65 +1,26 @@
-import { memo, useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { ClipboardIcon, LightBulbIcon } from '@heroicons/react/24/outline';
 import { ChevronDownIcon, ChevronUpIcon, CheckIcon, UserCircleIcon, CpuChipIcon } from '@heroicons/react/24/solid';
-import useTypingEffect from '../hooks/useTypingEffect';
 
 const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [thinkingCollapsed, setThinkingCollapsed] = useState(true);
-  const [shouldUseTypingEffect, setShouldUseTypingEffect] = useState(false);
   const messageRef = useRef(null);
   
-  // Safely extract role and content from message
-  const messageRole = typeof message.role === 'string' ? message.role.toLowerCase() : 'assistant';
-  const isUser = messageRole === 'user';
+  // Safely extract role and content from message - sử dụng useMemo
+  const messageRole = useMemo(() => 
+    typeof message.role === 'string' ? message.role.toLowerCase() : 'assistant', [message.role]);
+    
+  const isUser = useMemo(() => messageRole === 'user', [messageRole]);
   
-  // Get message content
-  const messageContent = getMessageContent();
-  
-  // Typing effect hook - sử dụng cho tin nhắn AI mới nhất đang được stream
-  const { 
-    displayText, 
-    isTyping,
-    contentType, 
-    progress,
-    completeTyping 
-  } = useTypingEffect(messageContent, {
-    speed: 20, // Tốc độ cơ bản
-    startTyping: shouldUseTypingEffect && isLast && !isUser,
-    showCursor: false,
-    batchSize: 12,  // Kích thước batch lớn hơn để mượt mà hơn
-    useChunkedRendering: true,
-    smartSpeed: true // Sử dụng tốc độ thông minh theo loại nội dung
-  });
-
-  // Phát hiện khi nào người dùng cuộn tin nhắn
-  useEffect(() => {
-    const handleScroll = () => {
-      // Nếu người dùng đang cuộn và đang có hiệu ứng đánh chữ, hãy hiển thị toàn bộ nội dung ngay lập tức
-      if (shouldUseTypingEffect && isTyping && progress > 0.1) {
-        completeTyping();
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, [shouldUseTypingEffect, isTyping, progress, completeTyping]);
-
-  // Quyết định khi nào sử dụng typing effect (chỉ cho tin nhắn AI và tin nhắn mới nhất)
-  useEffect(() => {
-    if (isLast && !isUser && isLoading) {
-      setShouldUseTypingEffect(true);
-    }
-  }, [isLast, isUser, isLoading]);
-  
+  // Get message content với useMemo để tránh tính toán lại
+  const messageContent = useMemo(() => getMessageContent(), [message.content]);
+   
   // Safely get thinking content as string
-  const getThinkingContent = () => {
+  const getThinkingContent = useCallback(() => {
     // First prioritize the 'think' property if it exists
     if (message.think && typeof message.think === 'string') {
       return message.think;
@@ -72,10 +33,11 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
     
     // Default empty string
     return '';
-  };
+  }, [message.think, message.thinking]);
   
-  // Check if message has thinking content
-  const hasThinking = message.thinking || (getThinkingContent() !== '');
+  // Check if message has thinking content - dùng useMemo
+  const hasThinking = useMemo(() => 
+    message.thinking || (getThinkingContent() !== ''), [message.thinking, getThinkingContent]);
 
   // Safely convert content to string
   function getMessageContent() {
@@ -98,20 +60,20 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
     }
   }
 
-  const formatThinkingTime = (ms) => {
+  const formatThinkingTime = useCallback((ms) => {
     if (!ms || ms < 100) return '';
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)} giây`;
-  };
+  }, []);
 
-  const handleCopyCode = (code) => {
+  const handleCopyCode = useCallback((code) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
-  };
+  }, []);
 
-  // Render the message content
-  const renderContent = () => {
+  // Render the message content với useCallback
+  const renderContent = useCallback(() => {
     // Loading state for AI
     if (isLoading && !isUser && !message.content) {
       return (
@@ -127,10 +89,6 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
     if (isUser) {
       return <div className="whitespace-pre-wrap leading-relaxed">{messageContent}</div>;
     }
-    
-    // Quyết định xem có sử dụng typing effect hay không
-    const shouldShowTypingEffect = shouldUseTypingEffect && isLast && isLoading;
-    const contentToDisplay = shouldShowTypingEffect ? displayText : messageContent;
     
     // AI messages use Markdown
     return (
@@ -280,16 +238,16 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
             ),
           }}
         >
-          {contentToDisplay}
+          {messageContent}
         </ReactMarkdown>
-        
-        {/* Hiển thị con trỏ đánh chữ có animation */}
-        {shouldShowTypingEffect && isTyping && (
-          <span className="inline-block ml-1 h-4 w-0.5 bg-indigo-600 animate-cursor-blink" />
-        )}
       </div>
     );
-  };
+  }, [isLoading, isUser, messageContent, messageRef, handleCopyCode, copiedCode]);
+
+  // Tính toán components chỉ khi cần thiết
+  const thinkingContent = useMemo(() => getThinkingContent(), [getThinkingContent]);
+  const formattedThinkingTime = useMemo(() => 
+    formatThinkingTime(message.thinkingTime), [formatThinkingTime, message.thinkingTime]);
 
   return (
     <div className={`px-2 sm:px-4 py-2 group ${isUser ? 'flex justify-end' : 'flex justify-start'}`}>
@@ -327,7 +285,7 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
                 <LightBulbIcon className="h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1" />
                 <span className="truncate">
                   {isLoading && message.thinking ? 'Đang suy nghĩ...' : 'Quá trình suy nghĩ'}
-                  {message.thinkingTime ? ` (${formatThinkingTime(message.thinkingTime)})` : ''}
+                  {message.thinkingTime ? ` (${formattedThinkingTime})` : ''}
                 </span>
                 {thinkingCollapsed ? 
                   <ChevronDownIcon className="ml-1 h-3 sm:h-3.5 w-3 sm:w-3.5 flex-shrink-0" /> : 
@@ -338,7 +296,7 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
               {!thinkingCollapsed && (
                 <div className="bg-gradient-to-r from-indigo-50 to-blue-50 mt-2 mb-3 text-sm border-l-2 border-indigo-300 pl-2 sm:pl-3 py-2 rounded-r-md overflow-auto max-h-40 sm:max-h-60 scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-indigo-50">
                   <pre className="whitespace-pre-wrap font-mono text-xs text-slate-700 break-words">
-                    {getThinkingContent()}
+                    {thinkingContent}
                   </pre>
                 </div>
               )}
@@ -377,6 +335,24 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
       </div>
     </div>
   );
+}, (prevProps, nextProps) => {
+  // Tối ưu memo để chỉ re-render khi thực sự cần thiết
+  if (prevProps.isLoading !== nextProps.isLoading) return false;
+  if (prevProps.isLast !== nextProps.isLast) return false;
+  
+  const prevMsg = prevProps.message;
+  const nextMsg = nextProps.message;
+  
+  // So sánh các trường quan trọng
+  if (prevMsg.content !== nextMsg.content) return false;
+  if (prevMsg.role !== nextMsg.role) return false;
+  if (prevMsg.thinking !== nextMsg.thinking) return false;
+  if (prevMsg.think !== nextMsg.think) return false;
+  if (prevMsg.thinkingTime !== nextMsg.thinkingTime) return false;
+  if (prevMsg.timestamp !== nextMsg.timestamp) return false;
+  
+  // Nếu tất cả các trường quan trọng giống nhau, không cần re-render
+  return true;
 });
 
 export default ChatMessage;
