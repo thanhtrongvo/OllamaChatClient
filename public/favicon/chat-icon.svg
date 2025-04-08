@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="32" height="32">
+  <!-- Gradient background -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#7C3AED" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Chat bubble with rounded corners -->
+  <rect x="56" y="56" width="400" height="320" rx="60" ry="60" fill="url(#gradient)" />
+  
+  <!-- Chat bubble pointer -->
+  <path d="M170 376 L240 450 L310 376" fill="url(#gradient)" />
+  
+  <!-- Three dots inside the chat bubble (representing AI thinking) -->
+  <circle cx="166" cy="216" r="20" fill="white" />
+  <circle cx="256" cy="216" r="20" fill="white" />
+  <circle cx="346" cy="216" r="20" fill="white" />
+</svg>

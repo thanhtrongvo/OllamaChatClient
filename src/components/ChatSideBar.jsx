@@ -97,39 +97,22 @@ function ChatSidebar({
     const chatToDelete = chats.find(chat => chat.id === numericChatId);
     const chatTitle = chatToDelete?.title || 'cuộc trò chuyện này';
     
-    // Hiển thị toast xác nhận thay vì window.confirm
-    toast.warning(
-      <div className="flex flex-col">
-        <div className="flex items-center mb-2">
-          <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500 mr-2" />
-          <span className="font-medium">Xác nhận xóa</span>
-        </div>
-        <p className="mb-3">Bạn có chắc muốn xóa "{truncateText(chatTitle, 50)}" không?</p>
-        <div className="flex space-x-2 justify-end mt-1">
-          <button 
-            onClick={() => confirmDeleteChat(numericChatId)} 
-            className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs transition-colors"
-          >
-            Xóa
-          </button>
-          <button 
-            onClick={cancelDeleteChat}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-xs transition-colors"
-          >
-            Hủy
-          </button>
-        </div>
-      </div>, 
-      15000
-    );
-    
+    // Lưu ID chat cần xóa để xử lý UI
     setPendingDeleteChatId(numericChatId);
+    
+    // Sử dụng confirm thường thay vì toast phức tạp
+    if (window.confirm(`Bạn có chắc muốn xóa "${truncateText(chatTitle, 50)}" không?`)) {
+      confirmDeleteChat(numericChatId);
+    } else {
+      cancelDeleteChat();
+    }
   };
   
   // Xác nhận xóa chat
   const confirmDeleteChat = async (chatId) => {
     try {
       setIsDeleting(true);
+      
       console.log("Deleting chat with ID:", chatId);
       onDeleteChat(chatId);
       toast.success("Đã xóa cuộc trò chuyện thành công!");
@@ -144,7 +127,6 @@ function ChatSidebar({
   // Hủy xóa chat
   const cancelDeleteChat = () => {
     setPendingDeleteChatId(null);
-    toast.info("Đã hủy xóa cuộc trò chuyện.");
   };
 
   // Hàm xử lý click vào chat để chuyển đổi
@@ -178,14 +160,8 @@ function ChatSidebar({
       <div className="p-4 flex items-center justify-between border-b border-gray-800 bg-gray-800 shadow-md">
         <div className="flex items-center">
           <ChatBubbleLeftEllipsisIcon className="h-6 w-6 text-indigo-400 mr-2" />
-          <h2 className="text-lg font-semibold">Chat AI</h2>
+          <h2 className="text-lg font-semibold">Pikoes Chat</h2>
         </div>
-        <button 
-          className="p-1.5 rounded-full hover:bg-gray-700 text-gray-400 hover:text-white transition-colors" 
-          title="Cài đặt"
-        >
-          
-        </button>
       </div>
 
       {/* User info */}
@@ -212,14 +188,14 @@ function ChatSidebar({
         <button
           onClick={handleCreateNewChat} // Sử dụng hàm mới để xử lý tạo chat
           disabled={isTyping}
-          className={`w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-lg shadow-md text-sm font-medium text-white 
+          className={`w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-lg shadow-md text-sm font-medium text-white 
             ${isTyping 
               ? 'bg-indigo-400 cursor-not-allowed' 
               : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500'} 
             transition-colors duration-150`}
         >
           <PlusIcon className="h-5 w-5 mr-2" />
-          Tạo cuộc trò chuyện mới
+          <span className="whitespace-nowrap">Tạo cuộc trò chuyện mới</span>
           {isTyping && <span className="ml-2 text-xs">(AI đang xử lý...)</span>}
         </button>
       </div>
@@ -231,10 +207,10 @@ function ChatSidebar({
             Cuộc trò chuyện của bạn
           </h3>
           
-          <nav className="space-y-1">
+          <nav className="space-y-2">
             {chats.length === 0 && (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                <ChatBubbleLeftRightIcon className="h-8 w-8 mx-auto mb-2 text-gray-600" />
+              <div className="text-center py-5 text-gray-500 text-sm">
+                <ChatBubbleLeftRightIcon className="h-10 w-10 mx-auto mb-2 text-gray-600" />
                 <p>Chưa có cuộc trò chuyện nào</p>
                 <p className="mt-1">Hãy tạo cuộc trò chuyện mới!</p>
               </div>
@@ -243,14 +219,17 @@ function ChatSidebar({
             {chats.map((chat) => (
               <div 
                 key={chat.id} 
-                className={`group relative flex items-center justify-between px-2 py-3 text-sm rounded-md 
+                className={`group relative flex items-center justify-between px-3 py-3.5 text-sm rounded-md 
                   ${selectedChatId === chat.id 
                     ? 'bg-indigo-900 text-white' 
                     : 'text-gray-300 hover:bg-gray-800'} 
-                  ${isTyping ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                  ${isTyping ? 'cursor-not-allowed' : 'cursor-pointer'}
+                  touch-manipulation`}
                 onClick={() => handleSelectChat(chat.id)}
                 onMouseEnter={() => setHoveredChat(chat.id)}
                 onMouseLeave={() => setHoveredChat(null)}
+                role="button"
+                tabIndex="0"
               >
                 <div className="flex items-center flex-grow min-w-0">
                   <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
@@ -260,7 +239,7 @@ function ChatSidebar({
                   </div>
                   <div className="ml-3 flex-grow min-w-0">
                     <div className="truncate font-medium">
-                      {truncateText(chat.title)}
+                      {truncateText(chat.title, window.innerWidth < 640 ? 20 : 25)}
                     </div>
                     <div className="text-xs text-gray-400 truncate">
                       {formatDate(chat.lastUpdated || chat.createdAt)}
@@ -268,15 +247,17 @@ function ChatSidebar({
                   </div>
                 </div>
                 
-                {/* Nút xóa khi hover */}
+                {/* Nút xóa khi hover hoặc touch trên mobile */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     promptDeleteChat(chat.id);
                   }}
                   disabled={isTyping || isDeleting || pendingDeleteChatId === chat.id}
-                  className={`transition-all ${
-                    hoveredChat === chat.id ? 'opacity-100' : 'opacity-0'
+                  className={`transition-all p-2 ${
+                    hoveredChat === chat.id 
+                      ? 'opacity-100' 
+                      : 'opacity-0 md:opacity-0 md:group-hover:opacity-100'
                   } ${
                     isTyping || isDeleting || pendingDeleteChatId === chat.id
                       ? 'text-gray-500 cursor-not-allowed' 
@@ -305,53 +286,9 @@ function ChatSidebar({
       {/* Footer */}
       <div className="p-3 border-t border-gray-800 bg-gray-800">
         <div className="flex justify-between items-center">
-          <p className="text-xs text-gray-500">Được phát triển bởi Thanh Trọng</p>
+          <p className="text-xs text-gray-500">Được phát triển với mục đích thử nghiệm ❤️</p>
           
-          {/* Hiển thị nút đăng xuất hoặc nút xác nhận/huỷ */}
-          {showLogoutConfirm ? (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                className="flex items-center text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 transition-colors"
-                title="Xác nhận đăng xuất"
-              >
-                {isLoggingOut ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin h-3 w-3 mr-1 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Đang xử lý...
-                  </span>
-                ) : (
-                  "Xác nhận"
-                )}
-              </button>
-              <button
-                onClick={cancelLogout}
-                disabled={isLoggingOut}
-                className="flex items-center text-xs border border-gray-600 text-gray-300 px-2 py-1 rounded hover:bg-gray-700 transition-colors"
-                title="Huỷ đăng xuất"
-              >
-                Huỷ
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={promptLogout}
-              disabled={isTyping || isLoggingOut}
-              className={`flex items-center text-xs transition-colors ${
-                isTyping 
-                  ? 'text-gray-500 cursor-not-allowed' 
-                  : 'text-gray-400 hover:text-white'
-              }`}
-              title={isTyping ? "Không thể đăng xuất khi AI đang xử lý" : "Đăng xuất"}
-            >
-              <ArrowLeftCircleIcon className="h-4 w-4 mr-1" />
-              Đăng xuất
-            </button>
-          )}
+          
         </div>
       </div>
     </div>

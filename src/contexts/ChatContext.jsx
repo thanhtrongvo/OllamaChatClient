@@ -508,7 +508,6 @@ export const ChatProvider = ({ children, defaultModelId = 'gemma3:4b' }) => {
   /**
    * Send a message and handle the response
    * @param {string} content - Message content
-   * @param {string} model - Model ID to use
    */
   const sendMessage = useCallback(async (content) => {
     // Validate input and state
@@ -599,40 +598,37 @@ export const ChatProvider = ({ children, defaultModelId = 'gemma3:4b' }) => {
     let finalAssistantThinking = '';
     let savedAssistantResponse = false;
     
+    // Biến theo dõi thời gian cập nhật để giảm tần suất render
+    let lastUpdateTime = 0;
+    const THROTTLE_INTERVAL = 80; // ms - Chỉ cập nhật UI mỗi 80ms
+    
     // Handle incoming stream messages
     const handleStreamMessage = (enhancedResponse) => {
-      finalAssistantContent = enhancedResponse.message?.content || '';
-      finalAssistantThinking = enhancedResponse.think || '';
-      
-      // Update assistant message with latest content
-      updateMessage(assistantMessageId, {
-        content: enhancedResponse.message?.content || '',
-        thinking: !!enhancedResponse.thinking,
-        think: enhancedResponse.think || '',
-        timestamp: new Date(enhancedResponse.created_at || Date.now()),
-        thinkingStartTime: enhancedResponse.thinkingStartTime,
-        thinkingTime: enhancedResponse.thinkingTime
-      });
-      
-      // When stream completes
+      // Tin nhắn cuối cùng
       if (enhancedResponse.done && !savedAssistantResponse) {
-        // Preserve thinking info
-        if (enhancedResponse.think && enhancedResponse.thinkingTime) {
-          updateMessage(assistantMessageId, {
-            thinking: false,
-            thinkingTime: enhancedResponse.thinkingTime
-          });
-        }
+        finalAssistantContent = enhancedResponse.message?.content || '';
+        finalAssistantThinking = enhancedResponse.think || '';
         
         dispatch({ type: ACTIONS.SET_TYPING, payload: false });
         abortStreamRef.current = null;
         
-        // Save AI response to backend
+        // Cập nhật trạng thái tin nhắn cuối với nội dung đầy đủ
+        updateMessage(assistantMessageId, {
+          content: finalAssistantContent,
+          thinking: false,
+          think: finalAssistantThinking,
+          timestamp: new Date(enhancedResponse.created_at || Date.now()),
+          thinkingStartTime: enhancedResponse.thinkingStartTime,
+          thinkingTime: enhancedResponse.thinkingTime
+        });
+        
+        // Đánh dấu đã lưu để tránh lưu nhiều lần
         savedAssistantResponse = true;
         
+        // Lưu tin nhắn vào backend
         if (finalAssistantContent.trim() && currentChatId) {
           try {
-            // Create message object for saving
+            // Tạo tin nhắn để lưu
             const messageToSave = {
               id: assistantMessageId,
               role: 'ASSISTANT',
@@ -641,19 +637,37 @@ export const ChatProvider = ({ children, defaultModelId = 'gemma3:4b' }) => {
               thinkingTime: enhancedResponse.thinkingTime
             };
             
-            // Save message
+            // Lưu tin nhắn
             saveMessageToBackend(currentChatId, messageToSave)
               .catch(err => console.error('Error saving AI response:', err));
           } catch (err) {
             console.error('Error preparing AI response for saving:', err);
           }
-        } else if (!finalAssistantContent.trim()) {
-          // If empty response, remove the assistant message
-          dispatch({ 
-            type: ACTIONS.SET_MESSAGES, 
-            payload: state.messages.filter(m => m.id !== assistantMessageId)
-          });
         }
+        return;
+      }
+      
+      // Tin nhắn thường xuyên trong stream - sử dụng throttle để giảm số lần render
+      const now = Date.now();
+      finalAssistantContent = enhancedResponse.message?.content || '';
+      finalAssistantThinking = enhancedResponse.think || '';
+      
+      // Chỉ cập nhật UI nếu đã qua THROTTLE_INTERVAL ms từ lần cập nhật cuối
+      // hoặc nếu trạng thái thinking thay đổi (để hiển thị ngay lập tức)
+      if (now - lastUpdateTime >= THROTTLE_INTERVAL || 
+          enhancedResponse.thinking !== state.messages.find(m => m.id === assistantMessageId)?.thinking) {
+        
+        // Cập nhật tin nhắn AI với nội dung mới nhất
+        updateMessage(assistantMessageId, {
+          content: finalAssistantContent,
+          thinking: !!enhancedResponse.thinking,
+          think: finalAssistantThinking,
+          timestamp: new Date(enhancedResponse.created_at || Date.now()),
+          thinkingStartTime: enhancedResponse.thinkingStartTime,
+          thinkingTime: enhancedResponse.thinkingTime
+        });
+        
+        lastUpdateTime = now;
       }
     };
     

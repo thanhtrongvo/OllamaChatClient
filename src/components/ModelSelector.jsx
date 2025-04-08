@@ -139,11 +139,7 @@ function ModelSelector({
                   }}
                 >
                   <div className="font-medium">{model.displayName || model.name}</div>
-                  {model.size && (
-                    <div className="text-xs text-gray-500">
-                      {formatModelSize(model.size)}
-                    </div>
-                  )}
+                  
                 </div>
               ))
             )}

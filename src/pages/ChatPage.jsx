@@ -10,7 +10,8 @@ import {
   CursorArrowRaysIcon,
   ChatBubbleLeftEllipsisIcon,
   Cog6ToothIcon,
-  BoltIcon
+  Bars3Icon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext.jsx';
@@ -44,6 +45,7 @@ function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [thinkingContent, setThinkingContent] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   
   // Ref để lưu hàm abort stream
   const abortStreamRef = useRef(null);
@@ -96,6 +98,13 @@ function ChatPage() {
     }
   }, [messages]);
 
+  // Đóng sidebar khi gửi tin nhắn trong chế độ mobile
+  useEffect(() => {
+    if (isSending && showMobileSidebar) {
+      setShowMobileSidebar(false);
+    }
+  }, [isSending, showMobileSidebar]);
+
   const handleAbortAiResponse = useCallback(() => { 
     if (abortStreamRef.current) {
       abortStreamRef.current();
@@ -112,13 +121,24 @@ function ChatPage() {
     selectModel(modelId);
   }, [selectModel]);
 
+  // Xử lý khi chọn chat trên mobile
+  const handleSelectChatMobile = useCallback((chatId) => {
+    selectChat(chatId);
+    setShowMobileSidebar(false);
+  }, [selectChat]);
+
+  // Toggle mobile sidebar
+  const toggleMobileSidebar = useCallback(() => {
+    setShowMobileSidebar(prev => !prev);
+  }, []);
+
   // Phần render của component
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-primary-50 to-secondary-50">
-      {/* Sidebar */}
+      {/* Desktop Sidebar */}
       <div className="w-72 flex-shrink-0 hidden md:block border-r border-primary-200 bg-white/80 backdrop-blur-sm shadow-subtle">
         <ChatSidebar
-          chats={chatHistory}  // Changed from messages to chatHistory
+          chats={chatHistory}
           selectedChatId={activeChatId}
           onSelectChat={selectChat}
           onCreateNewChat={createNewChat}
@@ -126,11 +146,55 @@ function ChatPage() {
         />
       </div>
 
+      {/* Mobile Sidebar - Absolute positioned over content when open */}
+      {showMobileSidebar && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          {/* Backdrop overlay */}
+          <div 
+            className="fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity" 
+            onClick={toggleMobileSidebar}
+          ></div>
+          
+          {/* Sidebar content */}
+          <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-gray-900">
+            <div className="absolute top-0 right-0 pt-4 pr-4 z-10">
+              <button
+                className="rounded-md text-white hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-white"
+                onClick={toggleMobileSidebar}
+              >
+                <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                <span className="sr-only">Đóng sidebar</span>
+              </button>
+            </div>
+            
+            <ChatSidebar
+              chats={chatHistory}
+              selectedChatId={activeChatId}
+              onSelectChat={handleSelectChatMobile}
+              onCreateNewChat={() => {
+                createNewChat();
+                setShowMobileSidebar(false);
+              }}
+              onDeleteChat={deleteChat}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center py-3 px-5 border-b border-primary-200 bg-white/80 backdrop-blur-sm shadow-subtle">
           <div className="flex items-center space-x-4">
+            {/* Mobile menu button */}
+            <button
+              className="md:hidden p-2 rounded-md text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 focus:outline-none"
+              onClick={toggleMobileSidebar}
+              aria-label="Mở menu"
+            >
+              <Bars3Icon className="h-6 w-6" />
+            </button>
+            
             {/* Mobile logo */}
             <div className="md:hidden flex items-center">
               <ChatBubbleLeftEllipsisIcon className="h-6 w-6 text-primary-600 mr-2" />
@@ -138,7 +202,7 @@ function ChatPage() {
             </div>
 
             {/* Model selection */}
-            <div className="w-48">
+            <div className="w-48 hidden sm:block">
               <ModelSelector
                 models={availableModels}
                 selectedModel={currentModel}
@@ -147,14 +211,11 @@ function ChatPage() {
                 className="w-full"
               />
             </div>
-
-              
-            
           </div>
 
           {/* Error message (if any) */}
           {error && (
-            <div className="mx-4 px-4 py-2 text-sm text-red-700 bg-red-100 rounded-xl animate-fade-in">
+            <div className="mx-4 px-4 py-2 text-sm text-red-700 bg-red-100 rounded-xl animate-fade-in max-w-xs sm:max-w-md overflow-hidden text-ellipsis">
               {error}
             </div>
           )}
@@ -164,10 +225,10 @@ function ChatPage() {
           <div>
             <button
               onClick={logout}
-              className="flex items-center px-4 py-2 text-sm font-medium text-dark-700 hover:text-primary-700 hover:bg-primary-50 rounded-xl transition-colors"
+              className="flex items-center px-2 py-1 sm:px-4 sm:py-2 text-sm font-medium text-dark-700 hover:text-primary-700 hover:bg-primary-50 rounded-xl transition-colors"
             >
-              <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
-              <span>Đăng xuất</span>
+              <ArrowRightOnRectangleIcon className="h-4 w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Đăng xuất</span>
             </button>
           </div>
         </div>

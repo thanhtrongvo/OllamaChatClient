@@ -44,6 +44,10 @@ export default { // Hoặc module.exports = { nếu là file .cjs
            'fade-out': {
              '0%': { opacity: '1' },
              '100%': { opacity: '0' }
+           },
+           'cursor-blink': {
+             '0%, 100%': { opacity: 1 },
+             '50%': { opacity: 0 }
            }
         },
         animation: {
@@ -51,7 +55,8 @@ export default { // Hoặc module.exports = { nếu là file .cjs
            'slide-in-right': 'slide-in-right 0.3s ease-out forwards',
            'slide-out-right': 'slide-out-right 0.3s ease-in forwards',
            'fade-in': 'fade-in 0.2s ease-out forwards',
-           'fade-out': 'fade-out 0.2s ease-in forwards'
+           'fade-out': 'fade-out 0.2s ease-in forwards',
+           'cursor-blink': 'cursor-blink 0.8s ease-in-out infinite'
         }
       },
     },

@@ -32,6 +32,29 @@ const safeStringify = (obj) => {
   });
 };
 
+// Đặt biến để kiểm soát việc redirect để tránh vòng lặp vô hạn
+const REDIRECT_COOLDOWN_KEY = 'auth_redirect_cooldown';
+const REDIRECT_COOLDOWN_TIME = 5000; // 5 giây giữa các lần chuyển hướng
+
+// Hàm kiểm tra xem có đang ở trang đăng nhập không
+const isOnLoginPage = () => {
+  return window.location.pathname.includes('/login');
+};
+
+// Hàm kiểm tra và đặt cooldown cho việc chuyển hướng
+const canRedirectToLogin = () => {
+  const now = Date.now();
+  const lastRedirect = localStorage.getItem(REDIRECT_COOLDOWN_KEY);
+  
+  if (lastRedirect && (now - parseInt(lastRedirect)) < REDIRECT_COOLDOWN_TIME) {
+    console.log('Đã chuyển hướng gần đây, bỏ qua yêu cầu chuyển hướng mới');
+    return false;
+  }
+  
+  localStorage.setItem(REDIRECT_COOLDOWN_KEY, now.toString());
+  return true;
+};
+
 // Tạo instance axios với withCredentials bật
 const createApi = (toastService = null) => {
   const api = axios.create({
@@ -126,21 +149,55 @@ const createApi = (toastService = null) => {
           url: error.config?.url
         });
         
-        if (error.response.status === 403) {
-          console.error('Lỗi 403 - Forbidden:', error.response.data);
-          // Hiển thị toast nếu có toastService
-          if (toastService) {
-            toastService.error('Bạn không có quyền truy cập vào chức năng này');
+        // Xử lý trường hợp 401 (Unauthorized) hoặc 403 (Forbidden)
+        if (error.response.status === 401 || error.response.status === 403) {
+          // Kiểm tra xem đây có phải là API models không
+          const isModelsApi = error.config?.url?.includes('/api/ollama/models');
+          const isApiCall = error.config?.url?.startsWith('/api/');
+          
+          // Nếu là lỗi 403 từ API models hoặc các API yêu cầu xác thực khác
+          if (error.response.status === 403 && (isModelsApi || isApiCall)) {
+            console.error('Phiên đăng nhập hết hạn hoặc không hợp lệ');
+            
+            // Xóa thông tin người dùng hiện tại từ localStorage
+            localStorage.removeItem('user');
+            
+            // Hiển thị thông báo lỗi một lần
+            if (toastService) {
+              toastService.error('Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại.');
+            }
+            
+            // Chỉ chuyển hướng nếu:
+            // 1. Không đang ở trang đăng nhập
+            // 2. Đủ thời gian cooldown giữa các lần chuyển hướng
+            if (!isOnLoginPage() && canRedirectToLogin()) {
+              console.log('Chuyển hướng đến trang đăng nhập...');
+              window.location.href = '/login';
+            } else {
+              console.log('Bỏ qua việc chuyển hướng đến trang đăng nhập (đã ở trang đăng nhập hoặc đã chuyển hướng gần đây)');
+            }
+            
+            return Promise.reject(new Error('Session expired'));
           }
-        }
-        
-        if (error.response.status === 401) {
-          // Xử lý lỗi 401 (ví dụ: logout user, chuyển hướng về login)
-          console.error("Unauthorized! Logging out.");
-          // Hiển thị toast nếu có toastService
-          if (toastService) {
-            const errorMessage = error.response.data?.message || 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ';
-            toastService.error(errorMessage);
+          
+          // Xử lý lỗi 403 chung
+          if (error.response.status === 403) {
+            console.error('Lỗi 403 - Forbidden:', error.response.data);
+            // Hiển thị toast nếu có toastService
+            if (toastService) {
+              toastService.error('Bạn không có quyền truy cập vào chức năng này');
+            }
+          }
+          
+          // Xử lý lỗi 401 chung
+          if (error.response.status === 401) {
+            // Xử lý lỗi 401 (ví dụ: logout user, chuyển hướng về login)
+            console.error("Unauthorized! Logging out.");
+            // Hiển thị toast nếu có toastService
+            if (toastService) {
+              const errorMessage = error.response.data?.message || 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ';
+              toastService.error(errorMessage);
+            }
           }
         }
       } else {

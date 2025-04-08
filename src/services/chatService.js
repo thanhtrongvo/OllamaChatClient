@@ -529,42 +529,67 @@ function processEventLine(line, state, modelId, onMessage, onError) {
  * @returns {Function} Hàm để abort stream
  */
 function startStreamingRequest(request, onMessage, onError) {
-    // Tạo abortion controller để cancel request khi cần
-    const abortController = new AbortController();
-    const { signal } = abortController;
+    // Tạo signal controller để hủy request
+    const controller = new AbortController();
+    const signal = controller.signal;
     
-    // Khởi tạo state cho thinking tracking
+    // Cấu hình request
+    const url = `/api/ollama/chat/stream`;
+    const model = request.model || 'gemma3:4b';
+    
+    // Trạng thái xử lý stream
     const state = {
-        isThinking: false,        // Đang trong trạng thái thinking hay không
-        thinkQueue: '',           // Nội dung thinking hiện tại (chưa hoàn thành)
-        messageQueue: '',         // Nội dung message hiện tại (không bao gồm thinking)
-        clientSideStartTime: null, // Thời điểm bắt đầu thinking (client-side)
-        startTimestamp: null,     // Timestamp bắt đầu thinking (server-side)
-        endTimestamp: null,       // Timestamp kết thúc thinking (server-side)
+        messageQueue: '', // Nội dung message tích lũy
+        thinkQueue: '',   // Nội dung thinking tích lũy
+        isThinking: false,
+        clientSideStartTime: undefined,
+        endTimestamp: undefined
     };
-
-    // Chuẩn bị URL và headers
-    const url = '/api/ollama/chat/stream';
-    
-    // Chuẩn bị request body
-    const body = JSON.stringify({
-        model: request.model,
-        messages: request.messages,
-        stream: true,
-        options: request.options || {}
-    });
     
     // Khởi tạo stream xử lý
     async function startStream() {
         try {
-            const apiUrl = api.defaults.baseURL ? `${api.defaults.baseURL}${url}` : url;
+            // Chuẩn bị URL base
+            let apiUrl = api.defaults.baseURL ? `${api.defaults.baseURL}${url}` : url;
             const headers = {
                 'Content-Type': 'application/json',
+                'Accept': 'text/event-stream',
                 ...authHeader()
             };
             
-            console.log(`Starting stream to ${apiUrl} with model ${request.model}`);
+            console.log(`Starting stream to ${apiUrl} with model ${model}`);
             
+            // Thử với phương thức GET trước nếu backend yêu cầu GET
+            // Chuyển request body thành query params
+            if (request.messages && request.messages.length > 0) {
+                try {
+                    // Nén và mã hóa messages để truyền qua query param
+                    const lastMessage = request.messages[request.messages.length - 1];
+                    const compressedQuery = encodeURIComponent(lastMessage.content);
+                    apiUrl = `${apiUrl}?model=${model}&q=${compressedQuery}`;
+                    
+                    console.log(`Using GET request with query: ${apiUrl.substring(0, 100)}...`);
+                    
+                    const response = await fetch(apiUrl, {
+                        method: 'GET',
+                        headers,
+                        signal
+                    });
+                    
+                    if (response.ok) {
+                        // Nếu GET thành công, xử lý response
+                        await processStreamResponse(response);
+                        return;
+                    } else {
+                        console.warn(`GET method failed with status ${response.status}, trying POST...`);
+                    }
+                } catch (getError) {
+                    console.warn('Error with GET request, trying POST instead:', getError);
+                }
+            }
+            
+            // Nếu GET không thành công hoặc không có messages, thử với POST
+            const body = JSON.stringify(request);
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers,
@@ -577,59 +602,8 @@ function startStreamingRequest(request, onMessage, onError) {
                 throw new Error(`HTTP error ${response.status}: ${errorText}`);
             }
             
-            // Get ReadableStream from response and start reading
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder('utf-8');
-            let buffer = '';
-            
-            // Process stream
-            while (true) {
-                const { value, done } = await reader.read();
-                
-                if (done) {
-                    // Handle any remaining data in buffer
-                    if (buffer.trim()) {
-                        const lines = buffer.split('\n');
-                        lines.forEach(line => {
-                            if (line.trim()) {
-                                processEventLine(line, state, request.model, onMessage, onError);
-                            }
-                        });
-                    }
-                    break;
-                }
-                
-                // Decode chunk and add to buffer
-                buffer += decoder.decode(value, { stream: true });
-                
-                // Process complete lines from buffer
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || ''; // Last line might be incomplete
-                
-                // Process each complete line
-                lines.forEach(line => {
-                    if (line.trim()) {
-                        processEventLine(line, state, request.model, onMessage, onError);
-                    }
-                });
-            }
-            
-            // Handle final chunk (ensuring 'done: true' is sent)
-            const finalResponse = {
-                model: request.model,
-                created_at: new Date().toISOString(),
-                message: { 
-                    role: 'assistant', 
-                    content: state.messageQueue
-                },
-                thinking: false,
-                think: state.thinkQueue,
-                thinkingTime: calculateThinkingTime(state),
-                done: true
-            };
-            
-            onMessage(finalResponse);
-            console.log('Stream completed normally');
+            // Xử lý response stream
+            await processStreamResponse(response);
             
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -637,7 +611,7 @@ function startStreamingRequest(request, onMessage, onError) {
                 
                 // Khi stream bị abort, gửi một message cuối để đánh dấu kết thúc
                 const finalResponse = {
-                    model: request.model,
+                    model: model,
                     created_at: new Date().toISOString(),
                     message: { 
                         role: 'assistant', 
@@ -658,15 +632,99 @@ function startStreamingRequest(request, onMessage, onError) {
         }
     }
     
-    // Start streaming and return abort function
-    startStream().catch(error => {
-        console.error('Error in stream:', error);
-        onError(error);
-    });
+    // Hàm xử lý stream response
+    async function processStreamResponse(response) {
+        // Get ReadableStream from response and start reading
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        
+        // Nâng cấp: giảm tần suất render bằng cách gộp nhiều chunk
+        let batchTimer = null;
+        let batchBuffer = [];
+        const BATCH_INTERVAL = 30; // ms - khoảng thời gian gộp các chunk lại với nhau
+        
+        // Process stream
+        while (true) {
+            const { value, done } = await reader.read();
+            
+            if (done) {
+                // Handle any remaining data in buffer
+                if (buffer.trim()) {
+                    const lines = buffer.split('\n');
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            processEventLine(line, state, model, onMessage, onError);
+                        }
+                    });
+                }
+                break;
+            }
+            
+            // Decode chunk and add to buffer
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Process complete lines from buffer
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Last line might be incomplete
+            
+            if (lines.length > 0) {
+                // Thay vì xử lý từng dòng ngay lập tức, gộp chúng vào batch
+                batchBuffer.push(...lines);
+                
+                // Nếu chưa có timer, tạo một timer mới để xử lý batch
+                if (!batchTimer) {
+                    batchTimer = setTimeout(() => {
+                        // Xử lý tất cả các dòng đã tích lũy trong batch
+                        batchBuffer.forEach(line => {
+                            if (line.trim()) {
+                                processEventLine(line, state, model, onMessage, onError);
+                            }
+                        });
+                        
+                        // Reset batch và timer
+                        batchBuffer = [];
+                        batchTimer = null;
+                    }, BATCH_INTERVAL);
+                }
+            }
+        }
+        
+        // Đảm bảo xử lý batch cuối cùng
+        if (batchTimer) {
+            clearTimeout(batchTimer);
+            batchBuffer.forEach(line => {
+                if (line.trim()) {
+                    processEventLine(line, state, model, onMessage, onError);
+                }
+            });
+        }
+        
+        // Handle final chunk (ensuring 'done: true' is sent)
+        const finalResponse = {
+            model: model,
+            created_at: new Date().toISOString(),
+            message: { 
+                role: 'assistant', 
+                content: state.messageQueue
+            },
+            thinking: false,
+            think: state.thinkQueue,
+            thinkingTime: calculateThinkingTime(state),
+            done: true
+        };
+        
+        onMessage(finalResponse);
+        console.log('Stream completed normally');
+    }
+
+    // Start stream
+    startStream();
     
+    // Return function to abort stream
     return () => {
-        console.log('Aborting stream...');
-        abortController.abort();
+        controller.abort();
+        return true;
     };
 }
 

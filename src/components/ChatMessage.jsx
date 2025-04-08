@@ -1,4 +1,4 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -9,54 +9,55 @@ import useTypingEffect from '../hooks/useTypingEffect';
 const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [thinkingCollapsed, setThinkingCollapsed] = useState(true);
-  const [showTypingEffect, setShowTypingEffect] = useState(false);
-  const [hasSeenBefore, setHasSeenBefore] = useState(false);
+  const [shouldUseTypingEffect, setShouldUseTypingEffect] = useState(false);
+  const messageRef = useRef(null);
   
   // Safely extract role and content from message
   const messageRole = typeof message.role === 'string' ? message.role.toLowerCase() : 'assistant';
   const isUser = messageRole === 'user';
-
+  
   // Get message content
   const messageContent = getMessageContent();
   
-  // On component mount, check if we've seen this message before using localStorage
+  // Typing effect hook - sử dụng cho tin nhắn AI mới nhất đang được stream
+  const { 
+    displayText, 
+    isTyping,
+    contentType, 
+    progress,
+    completeTyping 
+  } = useTypingEffect(messageContent, {
+    speed: 20, // Tốc độ cơ bản
+    startTyping: shouldUseTypingEffect && isLast && !isUser,
+    showCursor: false,
+    batchSize: 12,  // Kích thước batch lớn hơn để mượt mà hơn
+    useChunkedRendering: true,
+    smartSpeed: true // Sử dụng tốc độ thông minh theo loại nội dung
+  });
+
+  // Phát hiện khi nào người dùng cuộn tin nhắn
   useEffect(() => {
-    if (!isUser && message.id) {
-      const seenMessages = JSON.parse(localStorage.getItem('seenMessages') || '{}');
-      const hasBeenSeen = !!seenMessages[message.id];
-      setHasSeenBefore(hasBeenSeen);
+    const handleScroll = () => {
+      // Nếu người dùng đang cuộn và đang có hiệu ứng đánh chữ, hãy hiển thị toàn bộ nội dung ngay lập tức
+      if (shouldUseTypingEffect && isTyping && progress > 0.1) {
+        completeTyping();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [shouldUseTypingEffect, isTyping, progress, completeTyping]);
+
+  // Quyết định khi nào sử dụng typing effect (chỉ cho tin nhắn AI và tin nhắn mới nhất)
+  useEffect(() => {
+    if (isLast && !isUser && isLoading) {
+      setShouldUseTypingEffect(true);
     }
-  }, [message.id, isUser]);
+  }, [isLast, isUser, isLoading]);
   
-  // Configure typing effect for AI messages
-  const typingOptions = {
-    speed: 20, // Faster typing for better UX
-    startTyping: showTypingEffect && !isUser && !isLoading,
-    showCursor: true,
-    isLoading: isLoading
-  };
-  
-  const typing = useTypingEffect(messageContent, typingOptions);
-
-  // Đánh dấu tin nhắn là đã xem khi hiệu ứng typing hoàn tất
-  useEffect(() => {
-    if (!isUser && message.id && typing.isDone && showTypingEffect) {
-      const seenMessages = JSON.parse(localStorage.getItem('seenMessages') || '{}');
-      seenMessages[message.id] = true;
-      localStorage.setItem('seenMessages', JSON.stringify(seenMessages));
-      setHasSeenBefore(true);
-    }
-  }, [typing.isDone, message.id, isUser, showTypingEffect]);
-
-  // Enable typing effect for the last message from assistant if it has content
-  useEffect(() => {
-    if (isLast && !isUser && messageContent && !isLoading) {
-      setShowTypingEffect(true);
-    } else if (isUser) {
-      setShowTypingEffect(false);
-    }
-  }, [isLast, isUser, messageContent, isLoading]);
-
   // Safely get thinking content as string
   const getThinkingContent = () => {
     // First prioritize the 'think' property if it exists
@@ -78,28 +79,24 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
 
   // Safely convert content to string
   function getMessageContent() {
-    const { content } = message;
-    if (content === null || content === undefined) {
+    // Handle null or undefined content
+    if (message.content === null || message.content === undefined) {
       return '';
     }
     
-    if (typeof content === 'string') {
-      return content;
+    // If content is already a string, return it
+    if (typeof message.content === 'string') {
+      return message.content;
     }
     
-    // Handle object content by converting to JSON string
-    if (typeof content === 'object') {
-      try {
-        return JSON.stringify(content, null, 2);
-      } catch (err) {
-        console.error('Error stringifying message content:', err);
-        return '[Object content could not be displayed]';
-      }
+    // Try to convert content to string
+    try {
+      return String(message.content);
+    } catch (e) {
+      console.error('Could not convert message content to string:', e);
+      return '';
     }
-    
-    // Convert any other type to string
-    return String(content);
-  };
+  }
 
   const formatThinkingTime = (ms) => {
     if (!ms || ms < 100) return '';
@@ -130,19 +127,17 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
     if (isUser) {
       return <div className="whitespace-pre-wrap leading-relaxed">{messageContent}</div>;
     }
-
-    // Luôn hiển thị typing effect cho tin nhắn AI mới
-    const shouldUseTypingEffect = showTypingEffect && !hasSeenBefore && isLast;
-    const contentToRender = shouldUseTypingEffect && typing.displayText ? typing.displayText : messageContent;
+    
+    // Quyết định xem có sử dụng typing effect hay không
+    const shouldShowTypingEffect = shouldUseTypingEffect && isLast && isLoading;
+    const contentToDisplay = shouldShowTypingEffect ? displayText : messageContent;
     
     // AI messages use Markdown
     return (
-      <div className="relative prose prose-slate prose-a:text-indigo-600 prose-headings:text-slate-800 prose-headings:font-bold prose-p:my-2 max-w-full">
-        {shouldUseTypingEffect && typing.isTyping && (
-          <div className="absolute right-0 top-0 text-xs text-indigo-400 flex items-center">
-            <span className="inline-block w-5">{typing.dots}</span>
-          </div>
-        )}
+      <div 
+        className="relative prose prose-slate prose-a:text-indigo-600 prose-headings:text-slate-800 prose-headings:font-bold prose-p:my-2 max-w-full" 
+        ref={messageRef}
+      >
         <ReactMarkdown
           className="markdown-content break-words"
           remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -153,12 +148,12 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
 
               if (!inline && match) {
                 return (
-                  <div className="rounded-lg overflow-hidden my-3 bg-slate-800 border border-slate-700 shadow-lg transition-all hover:shadow-xl">
-                    <div className="flex justify-between items-center px-4 py-1.5 bg-slate-700 text-xs text-slate-300 font-mono">
-                      <span className="font-medium">{match[1]}</span>
+                  <div className="rounded-lg overflow-hidden my-3 bg-slate-800 border border-slate-700 shadow-lg transition-all hover:shadow-xl w-full">
+                    <div className="flex justify-between items-center px-2 sm:px-4 py-1.5 bg-slate-700 text-xs text-slate-300 font-mono">
+                      <span className="font-medium truncate">{match[1]}</span>
                       <button
                         onClick={() => handleCopyCode(code)}
-                        className="bg-slate-600 hover:bg-slate-500 transition-colors rounded px-2 py-1 flex items-center"
+                        className="bg-slate-600 hover:bg-slate-500 transition-colors rounded px-1.5 sm:px-2 py-1 flex items-center flex-shrink-0 ml-2"
                         aria-label="Copy code"
                       >
                         {copiedCode ? (
@@ -174,23 +169,26 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
                         )}
                       </button>
                     </div>
-                    <pre className="p-4 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800 text-sm">
-                      <code className={`${className} text-slate-50`} {...props}>
-                        {code}
-                      </code>
-                    </pre>
+                    <div className="overflow-x-auto max-w-full scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800">
+                      <pre className="p-2 sm:p-4 text-xs sm:text-sm">
+                        <code className={`${className} text-slate-50 whitespace-pre break-normal`} {...props}>
+                          {code}
+                        </code>
+                      </pre>
+                    </div>
                   </div>
                 );
               }
               return (
                 <code
-                  className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-indigo-600 text-sm"
+                  className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-indigo-600 text-xs sm:text-sm break-all"
                   {...props}
                 >
                   {children}
                 </code>
               );
             },
+            // Các component khác giữ nguyên
             h1: ({ children }) => (
               <h1 className="text-xl font-bold mt-6 mb-4 pb-2 border-b border-slate-200">{children}</h1>
             ),
@@ -232,8 +230,8 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
               </a>
             ),
             table: ({ children }) => (
-              <div className="overflow-x-auto my-6 rounded-lg shadow">
-                <table className="min-w-full border border-slate-200 rounded-lg bg-white">
+              <div className="overflow-x-auto w-full my-6 rounded-lg shadow">
+                <table className="min-w-full border border-slate-200 rounded-lg bg-white table-auto">
                   {children}
                 </table>
               </div>
@@ -282,18 +280,20 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
             ),
           }}
         >
-          {contentToRender}
+          {contentToDisplay}
         </ReactMarkdown>
-        {shouldUseTypingEffect && typing.isTyping && (
-          <span className="inline-block w-1.5 h-5 ml-0.5 bg-indigo-500 animate-cursor-blink align-middle"></span>
+        
+        {/* Hiển thị con trỏ đánh chữ có animation */}
+        {shouldShowTypingEffect && isTyping && (
+          <span className="inline-block ml-1 h-4 w-0.5 bg-indigo-600 animate-cursor-blink" />
         )}
       </div>
     );
   };
 
   return (
-    <div className={`px-4 py-2 group ${isUser ? 'flex justify-end' : 'flex justify-start'}`}>
-      <div className={`flex max-w-[85%] md:max-w-[75%] ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`px-2 sm:px-4 py-2 group ${isUser ? 'flex justify-end' : 'flex justify-start'}`}>
+      <div className={`flex max-w-[90%] sm:max-w-[85%] md:max-w-[75%] ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
         {/* Avatar for AI and User */}
         <div
           className={`flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center text-white ${
@@ -311,7 +311,7 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
 
         {/* Message bubble */}
         <div
-          className={`relative px-5 py-4 rounded-2xl transition-all duration-200 ${
+          className={`relative px-3 sm:px-5 py-3 sm:py-4 rounded-2xl transition-all duration-200 ${
             isUser
               ? 'bg-gradient-to-br from-indigo-500 to-indigo-700 text-white rounded-tr-none shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30'
               : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-md hover:shadow-lg'
@@ -322,22 +322,22 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
             <div className="mb-3">
               <button 
                 onClick={() => setThinkingCollapsed(!thinkingCollapsed)}
-                className={`text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-medium rounded-lg text-xs px-3 py-1 inline-flex items-center cursor-pointer transition-colors ${isLoading && message.thinking ? "animate-pulse bg-indigo-100" : ""}`}
+                className={`text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-medium rounded-lg text-xs px-2 sm:px-3 py-1 inline-flex items-center cursor-pointer transition-colors ${isLoading && message.thinking ? "animate-pulse bg-indigo-100" : ""}`}
               >
-                <LightBulbIcon className="h-3.5 w-3.5 mr-1" />
-                <span>
+                <LightBulbIcon className="h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1" />
+                <span className="truncate">
                   {isLoading && message.thinking ? 'Đang suy nghĩ...' : 'Quá trình suy nghĩ'}
                   {message.thinkingTime ? ` (${formatThinkingTime(message.thinkingTime)})` : ''}
                 </span>
                 {thinkingCollapsed ? 
-                  <ChevronDownIcon className="ml-1 h-3.5 w-3.5" /> : 
-                  <ChevronUpIcon className="ml-1 h-3.5 w-3.5" />
+                  <ChevronDownIcon className="ml-1 h-3 sm:h-3.5 w-3 sm:w-3.5 flex-shrink-0" /> : 
+                  <ChevronUpIcon className="ml-1 h-3 sm:h-3.5 w-3 sm:w-3.5 flex-shrink-0" />
                 }
               </button>
               
               {!thinkingCollapsed && (
-                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 mt-2 mb-3 text-sm border-l-2 border-indigo-300 pl-3 py-2 rounded-r-md overflow-auto max-h-60 scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-indigo-50">
-                  <pre className="whitespace-pre-wrap font-mono text-xs text-slate-700">
+                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 mt-2 mb-3 text-sm border-l-2 border-indigo-300 pl-2 sm:pl-3 py-2 rounded-r-md overflow-auto max-h-40 sm:max-h-60 scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-indigo-50">
+                  <pre className="whitespace-pre-wrap font-mono text-xs text-slate-700 break-words">
                     {getThinkingContent()}
                   </pre>
                 </div>
@@ -351,19 +351,17 @@ const ChatMessage = memo(({ message, isLoading = false, isLast = false }) => {
           {isLoading && !isUser && (
             <div className="mt-2">
               <div className="inline-block h-4 w-4">
-                <svg className="animate-spin h-4 w-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg xmlns="http://www.w3.org/2000/svg" className="animate-spin h-4 w-4 text-indigo-400" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               </div>
-              <span className="sr-only">Loading...</span>
             </div>
           )}
 
-          {/* Display time with gradient background for user messages */}
+          {/* Display timestamp if any */}
           {message.timestamp && (
-            <div
-              className={`text-xs mt-2 ${
+            <div className={`text-xs mt-1.5 mx-1 ${
                 isUser 
                   ? 'text-indigo-100 bg-gradient-to-r from-indigo-600/20 to-transparent px-2 py-0.5 rounded-full backdrop-blur-sm w-fit ml-auto'
                   : 'text-slate-400'

@@ -1,5 +1,5 @@
 // src/components/ChatWindow.jsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ChatMessage from './ChatMessage';
 import { 
   PaperAirplaneIcon, 
@@ -33,7 +33,10 @@ function ChatWindow({
   const [showSuggestions, setShowSuggestions] = useState(true);
   const chatInputRef = useRef(null);
   const [textareaHeight, setTextareaHeight] = useState(56); // Default height
-
+  const messagesContainerRef = useRef(null);
+  const lastScrollPositionRef = useRef(0);
+  const lastMessagesLengthRef = useRef(0);
+  
   // Kiểm tra tin nhắn bị lỗi
   const isLastMessageError = () => {
     if (!messages || messages.length === 0) return false;
@@ -45,10 +48,54 @@ function ChatWindow({
             lastMessage.content.includes("Sorry, I couldn't generate a proper response"));
   };
 
-  // Tự động cuộn xuống khi có tin nhắn mới
+  // Tự động cuộn xuống khi có tin nhắn mới - với hiệu suất tối ưu
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (messagesEndRef.current) {
+      const behavior = smooth ? "smooth" : "auto";
+      messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
+      if (onScrollToBottom) onScrollToBottom();
+    }
+  }, [onScrollToBottom]);
+  
+  // Thực hiện cuộn tối ưu dựa trên thay đổi tin nhắn
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading, thinkingContent, isAiResponding]);
+    // Chỉ cuộn tự động khi:
+    // 1. Số lượng tin nhắn tăng lên
+    // 2. Đang ở cuối chat
+    // 3. Đang có phản hồi từ AI
+    
+    const messagesContainer = messagesContainerRef.current;
+    if (!messagesContainer) return;
+    
+    const isAtBottom = () => {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+      // Được xem là ở cuối nếu khoảng cách đến cuối < 100px
+      return scrollHeight - scrollTop - clientHeight < 100;
+    };
+    
+    const wasAtBottom = isAtBottom();
+    const messageCountChanged = messages.length !== lastMessagesLengthRef.current;
+    lastMessagesLengthRef.current = messages.length;
+    
+    // Nếu đang ở cuối hoặc số lượng tin nhắn thay đổi và AI đang phản hồi
+    if ((wasAtBottom || messageCountChanged) && (isAiResponding || isLoading)) {
+      // Đặt timeout để đảm bảo DOM đã cập nhật
+      setTimeout(() => scrollToBottom(wasAtBottom), 10);
+    }
+  }, [messages, isLoading, thinkingContent, isAiResponding, scrollToBottom]);
+
+  // Lưu vị trí cuộn
+  useEffect(() => {
+    const messagesContainer = messagesContainerRef.current;
+    if (!messagesContainer) return;
+    
+    const handleScroll = () => {
+      lastScrollPositionRef.current = messagesContainer.scrollTop;
+    };
+    
+    messagesContainer.addEventListener('scroll', handleScroll);
+    return () => messagesContainer.removeEventListener('scroll', handleScroll);
+  }, []);
   
   // Theo dõi thời gian suy nghĩ
   useEffect(() => {
@@ -61,7 +108,7 @@ function ChatWindow({
         if (thinkingStartTime) {
           setElapsedThinkingTime(Date.now() - thinkingStartTime);
         }
-      }, 100);
+      }, 500); // Giảm tần suất cập nhật xuống 0.5 giây để giảm tải rendering
       
       return () => clearInterval(intervalId);
     } else {
@@ -77,13 +124,8 @@ function ChatWindow({
     return `${(ms / 1000).toFixed(1)} giây`;
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    if (onScrollToBottom) onScrollToBottom();
-  };
-
   // Xử lý gửi tin nhắn
-  const handleSendMessage = (e) => {
+  const handleSendMessage = useCallback((e) => {
     e.preventDefault();
     if (inputMessage.trim() && !isAiResponding && !isSending) {
       setLastSentMessage(inputMessage.trim());
@@ -91,15 +133,17 @@ function ChatWindow({
       setInputMessage('');
       setTextareaHeight(56); // Reset height after sending
       setShowSuggestions(false);
+      // Force scroll to bottom without animation khi gửi tin nhắn mới
+      setTimeout(() => scrollToBottom(false), 50);
     }
-  };
+  }, [inputMessage, isAiResponding, isSending, onSendMessage, scrollToBottom]);
   
   // Xử lý gửi lại tin nhắn cuối
-  const handleResendLastMessage = () => {
+  const handleResendLastMessage = useCallback(() => {
     if (lastSentMessage && !isAiResponding && !isSending) {
       onSendMessage(lastSentMessage);
     }
-  };
+  }, [lastSentMessage, isAiResponding, isSending, onSendMessage]);
 
   // Xử lý khi nhấn Enter gửi tin nhắn
   const handleKeyDown = (e) => {
@@ -140,7 +184,10 @@ function ChatWindow({
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Phần tin nhắn với thiết kế nâng cao */}
-      <div className="flex-1 overflow-auto p-4 md:p-6 space-y-6">
+      <div 
+        className="flex-1 overflow-auto p-4 md:p-6 space-y-6"
+        ref={messagesContainerRef}
+      >
         {/* Thông báo chưa chọn chat */}
         {!selectedChatId && !isLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center">
@@ -161,54 +208,58 @@ function ChatWindow({
         )}
 
         {/* Danh sách tin nhắn */}
-        {messages.length === 0 && selectedChatId ? (
-          <div className="flex flex-col justify-center items-center h-full text-center">
-            <div className="p-8 rounded-2xl bg-white shadow-xl max-w-lg transition-all hover:shadow-2xl border border-indigo-50">
-              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 rounded-xl inline-flex mb-6 shadow-lg">
-                <CpuChipIcon className="h-14 w-14 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold mb-4 text-gray-800">
-                Cuộc trò chuyện mới
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Bắt đầu cuộc trò chuyện với AI bằng cách gửi tin nhắn bên dưới!
-              </p>
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100 shadow-sm">
-                <div className="flex items-center mb-3">
-                  <LightBulbIcon className="h-5 w-5 text-amber-500 mr-2" />
-                  <h4 className="font-semibold text-indigo-800">Gợi ý:</h4>
-                </div>
-                <ul className="space-y-2 text-left">
-                  <li className="flex items-start">
-                    <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">1</span>
-                    <span className="text-gray-700">Hỏi về một chủ đề bạn quan tâm</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">2</span>
-                    <span className="text-gray-700">Tìm kiếm giải thích cho một khái niệm phức tạp</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">3</span>
-                    <span className="text-gray-700">Yêu cầu viết mã hoặc giải quyết vấn đề</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">4</span>
-                    <span className="text-gray-700">Nhờ giúp đỡ với một dự án cụ thể</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        ) : (
+        {selectedChatId && (
           <div className="space-y-8">
-            {messages.map((message, index) => (
-              <ChatMessage 
-                key={message.id || index} 
-                message={message} 
-                isLoading={(isAiResponding || isLoading) && index === messages.length - 1 && message.role === 'ASSISTANT'}
-                isLast={index === messages.length - 1}
-              />
-            ))}
+            {messages.length === 0 ? (
+              <div className="flex flex-col justify-center items-center h-full text-center">
+                <div className="p-8 rounded-2xl bg-white shadow-xl max-w-lg transition-all hover:shadow-2xl border border-indigo-50">
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-5 rounded-xl inline-flex mb-6 shadow-lg">
+                    <CpuChipIcon className="h-14 w-14 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-4 text-gray-800">
+                    Cuộc trò chuyện mới
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    Bắt đầu cuộc trò chuyện với AI bằng cách gửi tin nhắn bên dưới!
+                  </p>
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <LightBulbIcon className="h-5 w-5 text-amber-500 mr-2" />
+                      <h4 className="font-semibold text-indigo-800">Gợi ý:</h4>
+                    </div>
+                    <ul className="space-y-2 text-left">
+                      <li className="flex items-start">
+                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">1</span>
+                        <span className="text-gray-700">Hỏi về một chủ đề bạn quan tâm</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">2</span>
+                        <span className="text-gray-700">Tìm kiếm giải thích cho một khái niệm phức tạp</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">3</span>
+                        <span className="text-gray-700">Yêu cầu viết mã hoặc giải quyết vấn đề</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="inline-block h-5 w-5 bg-indigo-100 rounded-full flex-shrink-0 flex items-center justify-center text-indigo-600 mr-2 text-xs font-bold">4</span>
+                        <span className="text-gray-700">Nhờ giúp đỡ với một dự án cụ thể</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {messages.map((message, index) => (
+                  <ChatMessage 
+                    key={message.id || index} 
+                    message={message} 
+                    isLoading={(isAiResponding || isLoading) && index === messages.length - 1 && message.role === 'ASSISTANT'}
+                    isLast={index === messages.length - 1}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
         
